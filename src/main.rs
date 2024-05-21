@@ -1,6 +1,7 @@
-use std::ops::Range;
+use std::time::Instant;
 
-use rand::Rng;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 
 struct Board([[Option<usize>; 9]; 9]);
 
@@ -14,14 +15,14 @@ impl Board {
     }
 
     fn valid_place(&self, row: usize, col: usize, value: usize) -> bool {
-        // check rows and cols
+        // Check row and column
         for i in 0..9 {
             if self.0[row][i] == Some(value) || self.0[i][col] == Some(value) {
                 return false;
             }
         }
 
-        // check 3x3 grid
+        // Check 3x3 grid
         let row_start = (row / 3) * 3;
         let col_start = (col / 3) * 3;
 
@@ -36,31 +37,38 @@ impl Board {
         true
     }
 
-    fn place_number(
-        &mut self,
-        value: usize,
-        row_range: Range<usize>,
-        col_range: Range<usize>
-    ) -> bool {
-        for _ in 0..10 {
-            let row = rand::thread_rng().gen_range(row_range.clone());
-            let col = rand::thread_rng().gen_range(col_range.clone());
-            if self.valid_place(row, col, value) {
-                self.set(row, col, value);
-                return true;
+    fn find_empty(&self) -> Option<(usize, usize)> {
+        for row in 0..9 {
+            for col in 0..9 {
+                if self.0[row][col].is_none() {
+                    return Some((row, col));
+                }
             }
         }
-        false
+        None
     }
 
-    fn populate_board_with_number(&mut self, value: usize) {
-        for i in 0..9 {
-            let row_range = (i * 3) % 9..((i + 1) * 3) % 9;
-            let col_range = (i / 3) * 3..((i + 3) / 3) * 3;
-            println!("row_range: {:?}, col_range: {:?}", row_range, col_range);
-            if !self.place_number(value, row_range, col_range) {
-                panic!("Could not place number");
+    // Recusrive backtracking
+    fn solve(&mut self) -> bool {
+        // find empty cell
+        if let Some((row, col)) = self.find_empty() {
+            let mut numbers: Vec<usize> = (1..=9).collect();
+            numbers.shuffle(&mut thread_rng());
+            // Try each number
+            for &num in &numbers {
+                // If valid place, set the number and try to solve the rest
+                if self.valid_place(row, col, num) {
+                    self.set(row, col, num);
+                    if self.solve() {
+                        return true;
+                    }
+                    // If not valid, reset the cell
+                    self.0[row][col] = None;
+                }
             }
+            false
+        } else {
+            true
         }
     }
 
@@ -68,7 +76,7 @@ impl Board {
         for row in self.0.iter() {
             for cell in row.iter() {
                 match cell {
-                    Some(value) => print!("{} ", value),
+                    Some(value) => print!("\x1b[3{}m{}\x1b[0m ", (value % 7) + 1, value),
                     None => print!(". "),
                 }
             }
@@ -79,6 +87,12 @@ impl Board {
 
 fn main() {
     let mut board = Board::new();
-    board.populate_board_with_number(1);
-    board.print();
+
+    let now = Instant::now();
+    if board.solve() {
+        board.print();
+        println!("Time taken: {:?}", now.elapsed());
+    } else {
+        println!("No solution found");
+    }
 }
